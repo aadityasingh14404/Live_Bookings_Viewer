@@ -1,0 +1,13 @@
+{
+  "name": "node-starter",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "build": "echo 'No build step required for this Node.js application'",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1"
+  }
+}

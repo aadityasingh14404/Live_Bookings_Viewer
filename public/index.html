@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Bookings Viewer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="background-pattern"></div>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <div class="logo-section">
+                    <div class="logo">📊</div>
+                    <div class="title-section">
+                        <h1 class="title">Live Bookings</h1>
+                        <p class="subtitle">Real-time venue reservations</p>
+                    </div>
+                </div>
+                <div class="status-card" id="connectionStatus">
+                    <span class="status-indicator connecting"></span>
+                    <span class="status-text">Connecting...</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="stats-bar">
+                <div class="stat-card">
+                    <div class="stat-icon">📈</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="bookingCount">0</div>
+                        <div class="stat-label">Total Bookings</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⏱️</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="liveIndicator">LIVE</div>
+                        <div class="stat-label">Status</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🏢</div>
+                    <div class="stat-content">
+                        <div class="stat-number" id="venueCount">15</div>
+                        <div class="stat-label">Active Venues</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bookings-section">
+                <div class="section-header">
+                    <h2 class="section-title">Recent Reservations</h2>
+                    <div class="refresh-indicator" id="refreshIndicator">
+                        <div class="pulse-dot"></div>
+                        <span>Auto-updating</span>
+                    </div>
+                </div>
+            
+                <div class="bookings-container">
+                    <ul class="bookings-list" id="bookingsList">
+                        <!-- Bookings will be dynamically added here -->
+                    </ul>
+
+                    <div class="empty-state" id="emptyState">
+                        <div class="empty-animation">
+                            <div class="empty-icon">📅</div>
+                            <div class="loading-dots">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        </div>
+                        <h3>Waiting for bookings...</h3>
+                        <p>New reservations will appear here in real-time</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Socket.IO client -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // Initialize Socket.IO connection
+        const socket = io();
+        
+        // DOM elements
+        const bookingsList = document.getElementById('bookingsList');
+        const bookingCount = document.getElementById('bookingCount');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const emptyState = document.getElementById('emptyState');
+        
+        let totalBookings = 0;
+
+        // Update connection status
+        function updateConnectionStatus(status, message) {
+            const indicator = connectionStatus.querySelector('.status-indicator');
+            const text = connectionStatus.childNodes[2];
+            
+            indicator.className = `status-indicator ${status}`;
+            text.textContent = message;
+        }
+
+        // Create booking list item
+        function createBookingItem(booking) {
+            const li = document.createElement('li');
+            li.className = 'booking-item booking-item-new';
+            
+            // Generate a random booking value for visual interest
+            const bookingValue = Math.floor(Math.random() * 5000) + 500;
+            
+            li.innerHTML = `
+                <div class="booking-card">
+                    <div class="booking-status-bar"></div>
+                    <div class="booking-main">
+                        <div class="booking-left">
+                            <div class="venue-info">
+                                <h3 class="venue-name">${booking.venueName}</h3>
+                                <div class="booking-meta">
+                                    <span class="booking-time">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <polyline points="12,6 12,12 16,14"></polyline>
+                                        </svg>
+                                        ${booking.time}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="booking-right">
+                            <div class="party-info">
+                                <div class="party-size-badge">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                        <circle cx="9" cy="7" r="4"></circle>
+                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                    </svg>
+                                    <span class="party-count">${booking.partySize}</span>
+                                </div>
+                                <div class="booking-value">$${bookingValue.toLocaleString()}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="booking-footer">
+                        <span class="booking-id">ID: ${booking.id.toString().slice(-6)}</span>
+                        <span class="booking-status confirmed">Confirmed</span>
+                    </div>
+                </div>
+            `;
+            
+            // Add animation class
+            li.style.opacity = '0';
+            li.style.transform = 'translateY(-20px)';
+            
+            return li;
+        }
+
+        // Add booking to the list
+        function addBooking(booking) {
+            // Hide empty state if visible
+            if (emptyState.style.display !== 'none') {
+                emptyState.style.display = 'none';
+                bookingsList.style.display = 'block';
+            }
+
+            const bookingItem = createBookingItem(booking);
+            bookingsList.insertBefore(bookingItem, bookingsList.firstChild);
+            
+            // Animate in
+            setTimeout(() => {
+                bookingItem.style.transition = 'all 0.3s ease-out';
+                bookingItem.style.opacity = '1';
+                bookingItem.style.transform = 'translateY(0)';
+            }, 10);
+            
+            // Update counter
+            totalBookings++;
+            bookingCount.textContent = totalBookings;
+            
+            // Remove oldest items if we have too many (keep UI performant)
+            const items = bookingsList.children;
+            if (items.length > 20) {
+                const oldestItem = items[items.length - 1];
+                oldestItem.style.transition = 'all 0.3s ease-out';
+                oldestItem.style.opacity = '0';
+                oldestItem.style.transform = 'translateX(-100%)';
+                setTimeout(() => {
+                    if (oldestItem.parentNode) {
+                        oldestItem.parentNode.removeChild(oldestItem);
+                    }
+                }, 300);
+            }
+        }
+
+        // Socket event listeners
+        socket.on('connect', () => {
+            console.log('Connected to server');
+            updateConnectionStatus('connected', 'Connected');
+            document.getElementById('liveIndicator').textContent = 'LIVE';
+            document.getElementById('liveIndicator').className = 'stat-number live-active';
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            updateConnectionStatus('disconnected', 'Disconnected');
+            document.getElementById('liveIndicator').textContent = 'OFFLINE';
+            document.getElementById('liveIndicator').className = 'stat-number live-inactive';
+        });
+
+        socket.on('initial-bookings', (bookings) => {
+            console.log('Received initial bookings:', bookings.length);
+            
+            if (bookings.length === 0) {
+                emptyState.style.display = 'flex';
+                bookingsList.style.display = 'none';
+            } else {
+                emptyState.style.display = 'none';
+                bookingsList.style.display = 'block';
+                
+                // Add existing bookings (they're already sorted newest first)
+                bookings.forEach(booking => {
+                    const bookingItem = createBookingItem(booking);
+                    bookingItem.style.opacity = '1';
+                    bookingItem.style.transform = 'translateY(0)';
+                    bookingsList.appendChild(bookingItem);
+                });
+                
+                totalBookings = bookings.length;
+                bookingCount.textContent = totalBookings;
+            }
+        });
+
+        socket.on('new-booking', (booking) => {
+            console.log('New booking received:', booking);
+            addBooking(booking);
+            
+            // Add a subtle flash effect
+            const refreshIndicator = document.getElementById('refreshIndicator');
+            refreshIndicator.style.transform = 'scale(1.1)';
+            refreshIndicator.style.opacity = '1';
+            setTimeout(() => {
+                refreshIndicator.style.transform = 'scale(1)';
+            }, 300);
+        });
+
+        // Show empty state initially
+        emptyState.style.display = 'flex';
+        bookingsList.style.display = 'none';
+    </script>
+</body>
+</html>
